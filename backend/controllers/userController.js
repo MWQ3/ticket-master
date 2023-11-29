@@ -1,0 +1,102 @@
+const asyncHandler = require('express-async-handler')
+const bcrypt = require('bcryptjs')
+const User = require('../models/userModel')
+const jwt = require('jsonwebtoken')
+
+// @desc    Register a new user
+// @route   api/users
+// @access  Public
+const registerUser = asyncHandler(async (req, res) => {
+    const {name, email, password} = req.body
+
+    // validation
+
+    if(!name || !email || !password) {
+        res.status(400)
+        throw new Error('Type all fields')
+    }
+
+    // check to see if user already exist
+    const userExist = await User.findOne({email})
+
+    if(userExist) {
+        res.status(400)
+        throw new Error('a user with this email already exist!')
+    }
+
+    // hash the password (encrypt so it wont be visible when storing it)
+
+    const salt = await bcrypt.genSalt(10)
+    const hashedPassword = await bcrypt.hash(password, salt)
+
+    // create a user
+
+    const user = await User.create({
+        name,
+        email,
+        password: hashedPassword,
+    })
+
+    // if user is created
+    if(user) {
+        res.status(201).json({
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            token: generatedToken(user._id),
+        })
+    } else {
+        res.status(400)
+        throw new Error('Oops, Something went wrong')
+    }
+})
+
+
+// @desc    Login a new user
+// @route   api/users/login
+// @access  Public
+const loginUser = asyncHandler(async (req, res) => {
+    const {email, password} = req.body
+
+    const user = await User.findOne({email})
+
+    // check if user email & password match
+    if(user && (await bcrypt.compare(password, user.password))) {
+        res.status(200).json({
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            token: generatedToken(user._id),
+        })
+    } else {
+        res.status(401)
+        throw new Error('wrong email or/and password')
+    }
+})
+
+// @desc    Login user
+// @route   api/users/login
+// @access  Private
+const getMe = asyncHandler(async (req, res) => {
+    const user = {
+        id: req.user._id,
+        name: req.user.name,
+        email: req.user.email,
+    }
+
+    res.status(200).json(user)
+})
+
+// generate a token
+const generatedToken = (id) => {
+    return jwt.sign({ id }, process.env.JWT_SECRET, {
+        expiresIn: '30d'
+    })
+}
+
+module.exports = {
+    registerUser,
+    loginUser,
+    getMe,
+}
+ 
